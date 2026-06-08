@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOS Ansiedade - Triturador de Carga Mental Premium</title>
+  
+  <!-- Font loader -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React and ReactDOM UMD -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel for parsing JSX client-side -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      background-color: #f8fafc;
+    }
+    
+    .font-sans {
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Custom scrollbars */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(226, 232, 240, 0.5);
+      border-radius: 99px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.4);
+      border-radius: 99px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.6);
+    }
+
+    /* Dynamic fade-in animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+  
+  <script>
+    // Configure Tailwind Custom Colors
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              purple: '#7c3aed',
+              darkPurple: '#1e0b3c',
+              emerald: '#10b981',
+              sky: '#0284c7'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="selection:bg-indigo-100">
+
+  <div id="root"></div>
+
+  <!-- React standalone app compilation using Babel -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- SOUND ENGINE (Pure offline Web Audio synthesis of the 432Hz and grounding sweeps) ---
+    class WebAudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.volume = 0.5;
+        this.isPlaying = false;
+        
+        // Active Nodes
+        this.noiseNode = null;
+        this.noiseFilter = null;
+        this.pure432Oscillator = null;
+        this.pure432Gain = null;
+        
+        // Chord Nodes
+        this.chordOscillators = [];
+        this.chordGains = [];
+        this.currentMode = 'aterramento';
+      }
+
+      initCtx() {
+        if (!this.ctx) {
+          const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtxClass();
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+          this.masterGain.connect(this.ctx.destination);
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      setVolume(vol) {
+        this.volume = Math.max(0, Math.min(1, vol));
+        if (this.masterGain && this.ctx) {
+          this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+        }
+      }
+
+      // 1. Shredd tearing and crushing sound
+      triggerShredSound() {
+        this.initCtx();
+        const ctx = this.ctx;
+        const now = ctx.currentTime;
+
+        // Generate crackling noise buffer representation
+        const duration = 0.8;
+        const bufferSize = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          const t = i / bufferSize;
+          const crackleFreq = Math.sin(t * 80) * Math.cos(t * 300);
+          const isCrackle = Math.random() < 0.15 ? 1 : 0.05;
+          const envelope = Math.pow(1 - t, 1.8) * (1 + 0.3 * Math.sin(t * 40));
+          data[i] = white * envelope * isCrackle * (0.8 + 0.2 * crackleFreq);
+        }
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(650, now);
+        filter.frequency.exponentialRampToValueAtTime(180, now + duration);
+        filter.Q.setValueAtTime(3.0, now);
+
+        const subGain = ctx.createGain();
+        subGain.gain.setValueAtTime(0, now);
+        subGain.gain.linearRampToValueAtTime(0.7, now + 0.04);
+        subGain.gain.linearRampToValueAtTime(0.4, now + 0.2);
+        subGain.gain.linearRampToValueAtTime(0.6, now + 0.35);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        source.connect(filter);
+        filter.connect(subGain);
+        subGain.connect(ctx.destination);
+        source.start(now);
+
+        // Sub bass heavy impact thud
+        const thump = ctx.createOscillator();
+        const thumpGain = ctx.createGain();
+        thump.type = 'sine';
+        thump.frequency.setValueAtTime(110, now);
+        thump.frequency.exponentialRampToValueAtTime(35, now + 0.25);
+        thumpGain.gain.setValueAtTime(0.5, now);
+        thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+        thump.connect(thumpGain);
+        thumpGain.connect(ctx.destination);
+        thump.start(now);
+        thump.stop(now + 0.26);
+      }
+
+      // 2. Harmonic Pop explosion sound when raindrops dissolve inside Chromotherapy Circle
+      triggerRainPopSound() {
+        this.initCtx();
+        const ctx = this.ctx;
+        const now = ctx.currentTime;
+
+        // Sub thud
+        const sub = ctx.createOscillator();
+        const subGain = ctx.createGain();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(95, now);
+        sub.frequency.exponentialRampToValueAtTime(40, now + 0.35);
+        subGain.gain.setValueAtTime(0.12 * this.volume, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        sub.connect(subGain);
+        subGain.connect(this.masterGain || ctx.destination);
+
+        // Soft vaporization noise explosion
+        const bufSize = ctx.sampleRate * 0.4;
+        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - (i / bufSize), 2.5);
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buf;
+
+        const noiseFilter = ctx.createBiquadFilter();
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.setValueAtTime(800, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(250, now + 0.3);
+        noiseFilter.Q.setValueAtTime(1.8, now);
+
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.07 * this.volume, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.masterGain || ctx.destination);
+
+        // G-Major high crystal pulse octave
+        const spark = ctx.createOscillator();
+        const sparkGain = ctx.createGain();
+        spark.type = 'triangle';
+        spark.frequency.setValueAtTime(864, now); // Sweet 2 * 432Hz pitch representing Solfeggio transmutation
+        spark.frequency.exponentialRampToValueAtTime(432, now + 0.2);
+        sparkGain.gain.setValueAtTime(0.02 * this.volume, now);
+        sparkGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+        spark.connect(sparkGain);
+        sparkGain.connect(this.masterGain || ctx.destination);
+
+        sub.start(now);
+        noise.start(now);
+        spark.start(now);
+
+        sub.stop(now + 0.36);
+        noise.stop(now + 0.36);
+        spark.stop(now + 0.21);
+      }
+
+      // Start core breathing backdrop engine
+      start(mode) {
+        this.initCtx();
+        this.currentMode = mode;
+        if (this.isPlaying) return;
+        this.isPlaying = true;
+
+        const ctx = this.ctx;
+        const now = ctx.currentTime;
+
+        // Generate comfort background brown noise
+        const bufSize = ctx.sampleRate * 4; // 4s repeating
+        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        
+        let lastOut = 0.0;
+        for (let i = 0; i < bufSize; i++) {
+          const white = Math.random() * 2 - 1;
+          // Brownian low pass filter coefficient simulation
+          data[i] = (lastOut + (0.02 * white)) / 1.02;
+          lastOut = data[i];
+          data[i] *= 3.5; // normalize volume output
+        }
+
+        this.noiseNode = ctx.createBufferSource();
+        this.noiseNode.buffer = buf;
+        this.noiseNode.loop = true;
+
+        this.noiseFilter = ctx.createBiquadFilter();
+        this.noiseFilter.type = 'lowpass';
+        this.noiseFilter.frequency.setValueAtTime(mode === 'aterramento' ? 120 : 350, now);
+
+        const noiseVolume = ctx.createGain();
+        noiseVolume.gain.setValueAtTime(0.18, now);
+
+        this.noiseNode.connect(this.noiseFilter);
+        this.noiseFilter.connect(noiseVolume);
+        noiseVolume.connect(this.masterGain);
+
+        this.noiseNode.start(now);
+
+        // Pure Solfeggio 432Hz Backdrop Tone
+        this.pure432Oscillator = ctx.createOscillator();
+        this.pure432Oscillator.type = 'sine';
+        this.pure432Oscillator.frequency.setValueAtTime(432, now);
+
+        this.pure432Gain = ctx.createGain();
+        this.pure432Gain.gain.setValueAtTime(0, now);
+        this.pure432Gain.gain.linearRampToValueAtTime(0.04, now + 3);
+
+        this.pure432Oscillator.connect(this.pure432Gain);
+        this.pure432Gain.connect(this.masterGain);
+        this.pure432Oscillator.start(now);
+
+        // If 'renovacao', initialize synthesized chord backdrop paths
+        if (mode === 'renovacao') {
+          const notesG = [144, 216, 288, 384]; // Grounded healing chord harmonics (aligned to Solfeggio 432 octaves)
+          this.chordOscillators = [];
+          this.chordGains = [];
+          
+          notesG.forEach((note) => {
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(note, now);
+
+            const gNode = ctx.createGain();
+            gNode.gain.setValueAtTime(0, now);
+            gNode.gain.linearRampToValueAtTime(0.015, now + 4);
+
+            osc.connect(gNode);
+            gNode.connect(this.masterGain);
+            osc.start(now);
+
+            this.chordOscillators.push(osc);
+            this.chordGains.push(gNode);
+          });
+        }
+      }
+
+      setBreathingPhase(phase) {
+        if (!this.isPlaying || !this.ctx) return;
+        const ctx = this.ctx;
+        const now = ctx.currentTime;
+
+        const baseFilterFreq = this.currentMode === 'aterramento' ? 150 : 450;
+        const highFilterFreq = this.currentMode === 'aterramento' ? 320 : 800;
+
+        if (this.noiseFilter) {
+          if (phase === 'inhale') {
+            this.noiseFilter.frequency.exponentialRampToValueAtTime(highFilterFreq, now + 3.8);
+          } else if (phase === 'hold') {
+            this.noiseFilter.frequency.setValueAtTime(highFilterFreq, now);
+          } else if (phase === 'exhale') {
+            this.noiseFilter.frequency.exponentialRampToValueAtTime(baseFilterFreq, now + 3.8);
+          } else {
+            this.noiseFilter.frequency.setValueAtTime(baseFilterFreq, now);
+          }
+        }
+
+        if (this.pure432Gain) {
+          if (phase === 'inhale') {
+            this.pure432Gain.gain.linearRampToValueAtTime(0.06, now + 3.8);
+          } else if (phase === 'hold') {
+            this.pure432Gain.gain.setValueAtTime(0.06, now);
+          } else if (phase === 'exhale') {
+            this.pure432Gain.gain.linearRampToValueAtTime(0.02, now + 3.8);
+          } else {
+            this.pure432Gain.gain.setValueAtTime(0.015, now);
+          }
+        }
+
+        if (this.chordGains && this.chordGains.length > 0) {
+          this.chordGains.forEach((gNode) => {
+            if (phase === 'inhale') {
+              gNode.gain.linearRampToValueAtTime(0.03, now + 3.8);
+            } else if (phase === 'hold') {
+              gNode.gain.setValueAtTime(0.03, now);
+            } else if (phase === 'exhale') {
+              gNode.gain.linearRampToValueAtTime(0.01, now + 3.8);
+            } else {
+              gNode.gain.setValueAtTime(0.005, now);
+            }
+          });
+        }
+      }
+
+      stop() {
+        if (!this.isPlaying) return;
+        this.isPlaying = false;
+        
+        const now = this.ctx ? this.ctx.currentTime : 0;
+
+        if (this.noiseNode) {
+          try { this.noiseNode.stop(now); } catch(e){}
+          this.noiseNode = null;
+        }
+        if (this.pure432Oscillator) {
+          try { this.pure432Oscillator.stop(now); } catch(e){}
+          this.pure432Oscillator = null;
+        }
+        if (this.chordOscillators && this.chordOscillators.length > 0) {
+          this.chordOscillators.forEach((osc) => {
+            try { osc.stop(now); } catch(e){}
+          });
+          this.chordOscillators = [];
+        }
+        this.chordGains = [];
+        this.pure432Gain = null;
+        this.noiseFilter = null;
+      }
+    }
+
+    const audio = new WebAudioEngine();
+
+    // Comfort quotes mapper
+    const getComfortPhrase = (text) => {
+      const t = text.toLowerCase();
+      if (t.includes('finan') || t.includes('dinheiro') || t.includes('contas') || t.includes('pagar') || t.includes('banco')) {
+        return "✓ Crença Financeira Dissolvida: A abundância material começa com a clareza mental.";
+      }
+      if (t.includes('saude') || t.includes('corpo') || t.includes('doen') || t.includes('dor') || t.includes('morte')) {
+        return "✓ Angústia Física Dissolvida: Seu corpo se regenera e descansa a partir de agora.";
+      }
+      if (t.includes('trabalho') || t.includes('prazo') || t.includes('tempo') || t.includes('projeto') || t.includes('entregar')) {
+        return "✓ Cobrança de Produtividade Dissolvida: Você é de valor imensurável, independente do seu fazer.";
+      }
+      if (t.includes('futuro') || t.includes('ansiedade') || t.includes('amanha') || t.includes('medo') || t.includes('inquieta')) {
+        return "✓ Medo do Futuro Dissolvido: O amanhã não começou. O momento presente está seguro.";
+      }
+      if (t.includes('familia') || t.includes('brigou') || t.includes('discuss') || t.includes('relaciona') || t.includes('amigo')) {
+        return "✓ Conflito Interpessoal Dissolvido: Seu coração é soberano, e você dita sua própria paz.";
+      }
+      return "✓ Amarra Mental Dissolvida: Esse fardo foi desfeito em luz. Você está leve e livre para respirar.";
+    };
+
+    // Static default suggestions
+    const DEFAULT_SUGGESTIONS = [
+      'Cobranças internas e pressões de prazos',
+      'Preocupação com finanças ou contas futuras',
+      'Ansiedade e agitação acumulada da rotina',
+      'Insegurança sobre tomadas de decisões',
+      'Esgotamento ou cansaço acumulado hoje',
+    ];
+
+    const CHROMO_CONFIG = {
+      inhale: {
+        text: 'Inspire profundamente pelo nariz',
+        colorName: 'Azul Celeste',
+        colorHex: '#38bdf8',
+        bgHex: '#e0f2fe',
+        textColor: '#0369a1',
+        shadowClass: 'shadow-[0_0_25px_rgba(56,189,248,0.45)]',
+        textTag: 'text-sky-700 font-bold',
+        meaning: 'Calmante neural e reconexão silenciosa',
+        scaling: 'scale-110'
+      },
+      hold: {
+        text: 'Segure o ar nos pulmões',
+        colorName: 'Verde Regenerador',
+        colorHex: '#10b981',
+        bgHex: '#d1fae5',
+        textColor: '#047857',
+        shadowClass: 'shadow-[0_0_25px_rgba(16,185,129,0.45)]',
+        textTag: 'text-emerald-700 font-bold',
+        meaning: 'Equilíbrio cardíaco e harmonização interna',
+        scaling: 'scale-110'
+      },
+      exhale: {
+        text: 'Solte devagar pelo nariz',
+        colorName: 'Violeta Transmutador',
+        colorHex: '#a855f7',
+        bgHex: '#f3e8ff',
+        textColor: '#6b21a8',
+        shadowClass: 'shadow-[0_0_25px_rgba(168,85,247,0.45)]',
+        textTag: 'text-purple-700 font-bold',
+        meaning: 'Transmutação de cargas mentais e alívio',
+        scaling: 'scale-90'
+      },
+      holdEmpty: {
+        text: 'Mantenha os pulmões vazios',
+        colorName: 'Índigo Profundo',
+        colorHex: '#4f46e5',
+        bgHex: '#e0e7ff',
+        textColor: '#3730a3',
+        shadowClass: 'shadow-[0_0_25px_rgba(79,70,229,0.35)]',
+        textTag: 'text-indigo-700 font-bold',
+        meaning: 'Concentração profunda e limpeza dos ruídos',
+        scaling: 'scale-90'
+      }
+    };
+
+    // --- MAIN APPLICATION ENTRY WORKFLOW ---
+    function App() {
+      const [screen, setScreen] = useState('input'); // input | shredding | session | congratulations
+      const [worries, setWorries] = useState([]);
+      const [activeMode, setActiveMode] = useState('aterramento'); // aterramento | renovacao
+      const [volume, setVolume] = useState(0.5);
+      const [fontSize, setFontSize] = useState('normal'); // normal | large
+      const [completedDays, setCompletedDays] = useState([]);
+
+      // State references inside the breath play session
+      const [isPlaying, setIsPlaying] = useState(true);
+      const [breathingPhase, setBreathingPhase] = useState('inhale');
+      const [secondsLeft, setSecondsLeft] = useState(4);
+      const [breathCount, setBreathCount] = useState(1);
+      const [cycleCount, setCycleCount] = useState(1);
+      const [inRestInterval, setInRestInterval] = useState(false);
+      const [restSecondsLeft, setRestSecondsLeft] = useState(8);
+
+      // Load days complete on init
+      useEffect(() => {
+        try {
+          const saved = localStorage.getItem('mental_shredder_days_completed');
+          if (saved) {
+            setCompletedDays(JSON.parse(saved));
+          } else {
+            setCompletedDays([]);
+          }
+        } catch (e) {
+          console.warn("Local Storage tracking unavailable", e);
+        }
+      }, []);
+
+      useEffect(() => {
+        audio.setVolume(volume);
+      }, [volume]);
+
+      const handleAddWorry = (text) => {
+        const newWorry = {
+          id: Math.random().toString(36).substring(2, 9),
+          text,
+          createdAt: Date.now(),
+          crushed: false
+        };
+        setWorries(prev => [...prev, newWorry]);
+      };
+
+      const handleRemoveWorry = (id) => {
+        setWorries(prev => prev.filter(w => w.id !== id));
+      };
+
+      const handleStartShredding = () => {
+        if (worries.length === 0) {
+          handleAddWorry('Preocupações e tensões acumuladas da rotina');
+        }
+        setScreen('shredding');
+      };
+
+      const handleShreddingComplete = () => {
+        // Prepare breathing config values based on selected mode
+        setSecondsLeft(activeMode === 'aterramento' ? 4 : 5);
+        setBreathingPhase('inhale');
+        setBreathCount(1);
+        setCycleCount(1);
+        setInRestInterval(false);
+        setIsPlaying(true);
+        audio.start(activeMode);
+        audio.setBreathingPhase('inhale');
+        setScreen('session');
+      };
+
+      const handleSessionComplete = () => {
+        audio.stop();
+        setWorries([]);
+        
+        let updatedHistory = [...completedDays];
+        const nextDay = completedDays.length + 1;
+        if (nextDay <= 15 && !completedDays.includes(nextDay)) {
+          updatedHistory.push(nextDay);
+        } else if (completedDays.length >= 15) {
+          updatedHistory = [1];
+        }
+        
+        setCompletedDays(updatedHistory);
+        try {
+          localStorage.setItem('mental_shredder_days_completed', JSON.stringify(updatedHistory));
+        } catch (e){}
+        setScreen('congratulations');
+      };
+
+      const handleEndSession = () => {
+        audio.stop();
+        setWorries([]);
+        setScreen('input');
+      };
+
+      return (
+        <div className={`min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-indigo-100 overflow-hidden relative ${fontSize === 'large' ? 'text-lg' : 'text-base'}`}>
+          
+          {/* Header background glow */}
+          <div className="absolute top-0 left-0 w-full h-[325px] bg-gradient-to-b from-purple-100/30 to-transparent pointer-events-none z-0" />
+          
+          {/* Header Bar matching native premium specs perfectly */}
+          <header className="relative w-full z-20 border-b border-[#2d1254]/50 bg-gradient-to-r from-[#0a051d] via-[#15072b] to-[#04010b] px-5 py-4 flex items-center justify-between shadow-lg shadow-black/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2 border border-[#8b5cf6]/30 bg-[#1e1045]/60 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.25)]">
+                {/* SVG Lock representing Shield Secure space */}
+                <svg className="text-purple-400 w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg font-black text-white tracking-wide leading-tight font-sans">
+                  SOS Ansiedade
+                </span>
+                <span className="text-[10px] sm:text-[11px] font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#de8eff] via-[#ff7ec9] to-[#bf83ff] tracking-widest uppercase font-mono mt-0.5">
+                  TRITURADOR DE CARGA MENTAL
+                </span>
+              </div>
+            </div>
+            
+            {/* Header Accessibility Large Font Size switch button */}
+            <button
+              type="button"
+              onClick={() => setFontSize(f => f === 'large' ? 'normal' : 'large')}
+              className="border border-[#7c3aed]/40 bg-[#150a2e]/80 hover:bg-[#251052]/90 text-white rounded-xl px-4 py-1.5 flex flex-col items-center justify-center gap-0.5 cursor-pointer select-none transition-all duration-200 active:scale-95 shadow-md shadow-purple-950/20"
+            >
+              <span className="text-[10px] font-extrabold tracking-tight whitespace-nowrap">
+                {fontSize === 'large' ? 'Letra Normal' : 'Letra Grande'}
+              </span>
+              <span className="text-[11px]">🔍</span>
+            </button>
+          </header>
+
+          {/* Main stage with Animate Screen changes */}
+          <main className="flex-1 flex flex-col justify-between items-center relative z-10 py-4 w-full max-w-lg mx-auto px-4 overflow-y-auto">
+            
+            {screen === 'input' && (
+              <InputScreen 
+                worries={worries}
+                fontSize={fontSize}
+                volume={volume}
+                setVolume={setVolume}
+                activeMode={activeMode}
+                onAddWorry={handleAddWorry}
+                onRemoveWorry={handleRemoveWorry}
+                setActiveMode={setActiveMode}
+                onStartShredding={handleStartShredding}
+                completedDays={completedDays}
+              />
+            )}
+
+            {screen === 'shredding' && (
+              <ShredderScreen 
+                worries={worries}
+                onComplete={handleShreddingComplete}
+              />
+            )}
+
+            {screen === 'session' && (
+              <SessionScreen 
+                worries={worries}
+                fontSize={fontSize}
+                activeMode={activeMode}
+                volume={volume}
+                setVolume={setVolume}
+                isPlaying={isPlaying}
+                setIsPlaying={setIsPlaying}
+                breathingPhase={breathingPhase}
+                setBreathingPhase={setBreathingPhase}
+                secondsLeft={secondsLeft}
+                setSecondsLeft={setSecondsLeft}
+                breathCount={breathCount}
+                setBreathCount={setBreathCount}
+                cycleCount={cycleCount}
+                setCycleCount={setCycleCount}
+                inRestInterval={inRestInterval}
+                setInRestInterval={setInRestInterval}
+                restSecondsLeft={restSecondsLeft}
+                setRestSecondsLeft={setRestSecondsLeft}
+                onEndSession={handleEndSession}
+                onSessionComplete={handleSessionComplete}
+              />
+            )}
+
+            {screen === 'congratulations' && (
+              <CongratulationsScreen 
+                completedDays={completedDays}
+                fontSize={fontSize}
+                onGoHome={handleEndSession}
+              />
+            )}
+            
+          </main>
+        </div>
+      );
+    }
+
+    // --- SCREEN 1: WORRY COLLECTION STAGE (Confidential Vault) ---
+    function InputScreen({
+      worries,
+      fontSize,
+      volume,
+      setVolume,
+      activeMode,
+      onAddWorry,
+      onRemoveWorry,
+      setActiveMode,
+      onStartShredding,
+      completedDays
+    }) {
+      const [text, setText] = useState('');
+      const isLarge = fontSize === 'large';
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (text.trim()) {
+          onAddWorry(text.trim());
+          setText('');
+        }
+      };
+
+      // Filter out suggestions that are already in the vault
+      const availableSuggestions = DEFAULT_SUGGESTIONS.filter(
+        sug => !worries.some(w => w.text === sug)
+      );
+
+      return (
+        <div className="w-full flex-1 flex flex-col justify-between space-y-4 animate-fade-in py-2">
+          
+          {/* Important Security Warning Banner */}
+          <div className="bg-[#f0fdf4] border border-[#bbf7d0] p-3.5 rounded-2xl text-center space-y-1.5 shadow-sm shadow-[#f0fdf4]">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-[#dcfce7] text-[#15803d] rounded-full text-[10px] font-bold tracking-widest uppercase">
+              • Espaço Clínico Seguro
+            </div>
+            <p className={`text-[#14532d] leading-relaxed font-sans ${isLarge ? 'text-xs font-semibold' : 'text-[11px] font-medium'}`}>
+              <strong>Aviso Importante:</strong> Seus fardos emocionais são processados temporariamente no navegador de maneira 100% anônima e confidencial. Nada é arquivado em servidores comerciais.
+            </p>
+          </div>
+
+          {/* Form input and text container */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <h3 className={`text-slate-800 font-extrabold tracking-tight ${isLarge ? 'text-lg' : 'text-base'}`}>
+              O que está pesando em sua mente agora?
+            </h3>
+            
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <input
+                type="text"
+                value={text}
+                onChange={e => setText(e.target.value)}
+                placeholder="Escreva uma preocupação, cobrança ou medo..."
+                className={`flex-1 border border-slate-200 outline-none rounded-2xl bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:border-purple-300 transition-all px-4 ${isLarge ? 'py-3.5 text-base' : 'py-2.5 text-sm'}`}
+              />
+              <button
+                type="submit"
+                className="bg-black hover:bg-slate-900 border text-white rounded-2xl px-4 flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+                title="Carregar para o Cofre"
+              >
+                {/* Plus Icon tag */}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </button>
+            </form>
+
+            {/* Suggestions Chest always visible for immediate load */}
+            {availableSuggestions.length > 0 && (
+              <div id="suggestions-chest-box" className="space-y-2 pt-1 border-t border-slate-100">
+                <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-bold inline-flex items-center gap-1">
+                  <span>✨</span> Sugestões (toque para carregar no cofre):
+                </p>
+                <div className="flex flex-wrap gap-1.5 max-h-[110px] overflow-y-auto custom-scrollbar p-0.5">
+                  {availableSuggestions.map((sug, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => onAddWorry(sug)}
+                      className="text-left text-[11px] text-slate-600 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-100 hover:border-blue-200 py-1 px-2.5 rounded-xl truncate transition-all cursor-pointer max-w-full font-medium"
+                    >
+                      + {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* List area showing loaded worries inside the vault */}
+            <div className="space-y-2">
+              <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-bold">
+                Cargas Prontas no Cofre ({worries.length}):
+              </p>
+              
+              <div className="max-h-[120px] overflow-y-auto custom-scrollbar pr-1 space-y-2">
+                {worries.length === 0 ? (
+                  <div className="border border-dashed border-slate-200 py-4 rounded-2xl text-center bg-slate-50/20">
+                    <span className="text-[10px] font-mono tracking-widest uppercase font-bold text-slate-400">Cofre Vazio</span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Nenhuma carga adicionada. Adicione acima ou use as sugestões!</p>
+                  </div>
+                ) : (
+                  worries.map((w) => (
+                    <div key={w.id} className="flex items-center justify-between bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-2xl shadow-2xs gap-3">
+                      <span className={`text-slate-700 font-medium font-sans leading-tight truncate flex-1 ${isLarge ? 'text-xs' : 'text-[11px]'}`}>
+                        {w.text}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveWorry(w.id)}
+                        className="text-red-400 hover:text-red-500 p-1 bg-white hover:bg-red-50 border border-slate-200 rounded-lg cursor-pointer transition-colors"
+                      >
+                        {/* Trash Icon */}
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Sound, Breathing Settings Deck */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <h4 className={`text-slate-800 font-extrabold tracking-tight ${isLarge ? 'text-sm' : 'text-xs'}`}>
+              Ajustes do Relaxamento & Foco:
+            </h4>
+            
+            {/* Audio volume slider controller */}
+            <div className="flex items-center justify-between gap-4 py-1 pb-2 border-b border-slate-100">
+              <span className="text-[11px] text-slate-400 font-mono uppercase tracking-wider font-bold">Volume do Sintetizador:</span>
+              <div className="flex items-center gap-2 flex-1 max-w-[180px]">
+                <span className="text-slate-400">
+                  {volume === 0 ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                  )}
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={volume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#7c3aed]"
+                />
+                <span className="text-[10px] font-mono text-slate-400 w-6 text-right font-bold">{Math.round(volume * 100)}%</span>
+              </div>
+            </div>
+
+            {/* Breathing Mode selector */}
+            <div className="space-y-2">
+              <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider font-bold block">Escolha o seu Foco de Atenção:</span>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('aterramento')}
+                  className={`border rounded-2xl p-3 text-left transition-all duration-150 cursor-pointer ${activeMode === 'aterramento' ? 'border-indigo-400 bg-indigo-50/40 text-slate-900 shadow-sm' : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-500'}`}
+                >
+                  <p className="font-extrabold text-xs">Aterramento</p>
+                  <p className="text-[10px] text-slate-400 mt-1 leading-normal font-medium">Ciclo de Respiração Quadrada (4s-4s-4s-4s) com ondas Binaurais de Som Marítimo.</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('renovacao')}
+                  className={`border rounded-2xl p-3 text-left transition-all duration-150 cursor-pointer ${activeMode === 'renovacao' ? 'border-indigo-400 bg-indigo-50/40 text-slate-900 shadow-sm' : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-500'}`}
+                >
+                  <p className="font-extrabold text-xs">Renovação Coerente</p>
+                  <p className="text-[10px] text-slate-350 text-slate-400 mt-1 leading-normal font-medium">Ciclo de Respiração Coerente (5s In, 5s Out) acompanhado de acordes em Sol Maior.</p>
+                </button>
+              </div>
+            </div>
+
+            {/* Start shredding trigger button matching the screenshot */}
+            <button
+              type="button"
+              onClick={onStartShredding}
+              className="w-full py-4 bg-gradient-to-r from-sky-400 via-sky-500 to-blue-600 text-white rounded-2xl font-extrabold text-center flex items-center justify-center gap-2 shadow-md hover:brightness-105 active:scale-98 transition-all cursor-pointer shadow-sky-100/50"
+              id="shred-and-start-btn"
+            >
+              {/* Sparkles icon on the left */}
+              <svg className="w-4.5 h-4.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                <path d="m5 3 1 2.5L8.5 6 6 7 5 9.5 4 7 1.5 6 4 5.5z"/>
+                <path d="M19 17l1 2.5 2.5.5-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/>
+              </svg>
+              <span>Triturar Cargas e Iniciar</span>
+            </button>
+          </div>
+
+          {/* 15 Days Habit Tracker History */}
+          <JourneyTracker completedDays={completedDays} />
+
+          {/* Ethics warning card matching the screenshot perfectly */}
+          <div className="mt-4 p-4 bg-[#fdf2f2]/90 backdrop-blur-xs border border-rose-100/70 rounded-3xl text-center space-y-2 max-w-sm mx-auto shadow-sm" id="disclaimer-footer">
+            <div className="flex items-center justify-center gap-1.5 text-slate-500 font-mono font-bold tracking-wider uppercase text-[8px] sm:text-[9.5px]">
+              <svg className="text-teal-500 w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7s0 6 8 10z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="m9 12 2 2 4-4" />
+              </svg>
+              <span>CONSELHO DE PSICOLOGIA & ÉTICA PROFISSIONAL</span>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-relaxed font-sans font-medium">
+              Este trabalho é um recurso complementar de regulação e suporte emocional e <strong className="font-bold text-slate-700">não substitui</strong> o acompanhamento médico e psicológico especializado. Não aconselhamos, em nenhuma circunstância, a suspensão ou alteração de medicamentos prescritos sem orientação médica direta, prezando pela segurança de sua saúde integrativa.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // --- SCREEN 2: DISSOLUTION PARTICLE PHYSICS RAIN STAGE ---
+    function ShredderScreen({ worries, onComplete }) {
+      const canvasRef = useRef(null);
+      const containerRef = useRef(null);
+      const [activePhrase, setActivePhrase] = useState('Desintegrando cargas mentais e crenças...');
+      const [isFinishing, setIsFinishing] = useState(false);
+
+      useEffect(() => {
+        const list = worries.length > 0 ? worries : [{ id: 'default', text: 'Preocupações acumuladas', createdAt: Date.now(), crushed: false }];
+        
+        // Stagger drops vertical heights to rain sequentially
+        const capsules = list.map((w, idx) => ({
+          id: w.id,
+          text: w.text,
+          x: 0, 
+          y: -100 - (idx * 250), 
+          vy: 2.8 + Math.random() * 0.7,
+          width: 190,
+          height: 52,
+          exploded: false,
+          comfortPhrase: getComfortPhrase(w.text)
+        }));
+
+        const sparks = [];
+        const shockwaves = [];
+        let circleRadius = 65;
+        let animationFrameId = null;
+        let completed = false;
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const handleResize = () => {
+          const rect = containerRef.current?.getBoundingClientRect();
+          canvas.width = rect?.width || window.innerWidth;
+          canvas.height = rect?.height || 410;
+        };
+
+        handleResize();
+
+        // Canvas element alignment references
+        let circleX = canvas.width * 0.5;
+        let circleY = canvas.height * 0.52;
+
+        capsules.forEach(cap => {
+          cap.x = circleX + (Math.random() * 80 - 40);
+        });
+
+        const chromoColors = ['#a855f7', '#06b6d4', '#10b981', '#6366f1', '#f43f5e', '#f59e0b'];
+
+        const updateLoop = () => {
+          // Soft slate clean reflection space
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Grid backdrop
+          ctx.strokeStyle = 'rgba(226, 232, 240, 0.4)';
+          ctx.lineWidth = 1;
+          const gridSize = 40;
+          for (let x = 0; x < canvas.width; x += gridSize) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+          }
+          for (let y = 0; y < canvas.height; y += gridSize) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+          }
+
+          // Ambient radial breathing glow around core
+          const aura = ctx.createRadialGradient(circleX, circleY, 15, circleX, circleY, circleRadius + 45);
+          aura.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+          aura.addColorStop(0.3, 'rgba(168, 85, 247, 0.1)'); // Purple
+          aura.addColorStop(0.7, 'rgba(6, 182, 212, 0.08)');  // Cyan
+          aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          ctx.fillStyle = aura;
+          ctx.beginPath();
+          ctx.arc(circleX, circleY, circleRadius + 60, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Physical Chromotherapy boundary Ring
+          ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)';
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.arc(circleX, circleY, circleRadius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Liquid core reflection
+          const coreGrad = ctx.createRadialGradient(circleX, circleY, 5, circleX, circleY, circleRadius - 4);
+          coreGrad.addColorStop(0, '#ffffff');
+          coreGrad.addColorStop(0.65, '#f0fdfa');
+          coreGrad.addColorStop(1, '#ecfeff');
+          ctx.fillStyle = coreGrad;
+          ctx.beginPath();
+          ctx.arc(circleX, circleY, circleRadius - 2, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Concentric spinning circle markings
+          ctx.strokeStyle = 'rgba(168, 85, 247, 0.4)';
+          ctx.lineWidth = 1.0;
+          ctx.setLineDash([5, 12]);
+          ctx.beginPath();
+          ctx.arc(circleX, circleY, circleRadius - 8, Date.now() * 0.001, (Date.now() * 0.001) + Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Rain Drop capsules physical simulations
+          capsules.forEach(cap => {
+            if (cap.exploded) return;
+
+            cap.y += cap.vy;
+            const sway = Math.sin((Date.now() * 0.002) + (cap.y * 0.012)) * 1.5;
+            const drawX = cap.x + sway;
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(148, 163, 184, 0.1)';
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetY = 3;
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+            ctx.lineWidth = 1.2;
+
+            const rx = drawX - (cap.width / 2);
+            const ry = cap.y - (cap.height / 2);
+            const r = 16;
+
+            ctx.beginPath();
+            ctx.moveTo(rx + r, ry);
+            ctx.lineTo(rx + cap.width - r, ry);
+            ctx.quadraticCurveTo(rx + cap.width, ry, rx + cap.width, ry + r);
+            ctx.lineTo(rx + cap.width, ry + cap.height - r);
+            ctx.quadraticCurveTo(rx + cap.width, ry + cap.height, rx + cap.width - r, ry + cap.height);
+            ctx.lineTo(rx + r, ry + cap.height);
+            ctx.quadraticCurveTo(rx, ry + cap.height, rx, ry + cap.height - r);
+            ctx.lineTo(rx, ry + r);
+            ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Coral emotional indicator dots
+            ctx.fillStyle = '#f87171';
+            ctx.beginPath();
+            ctx.arc(rx + 12, ry + cap.height * 0.5, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Sliced title worry wording
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#334155';
+            ctx.font = 'bold 12px Inter, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            const limitText = cap.text.length > 21 ? cap.text.substring(0, 19) + '...' : cap.text;
+            ctx.fillText(limitText, rx + 24, ry + cap.height * 0.5);
+            ctx.restore();
+
+            // IMPACT DETONATION CHROME RING
+            if (cap.y >= circleY && !cap.exploded) {
+              cap.exploded = true;
+
+              // Sound Trigger pop synthesize
+              audio.triggerRainPopSound();
+
+              // Update Portuguese affirmation subtitle
+              setActivePhrase(cap.comfortPhrase);
+
+              // Circular shockwave ring spawn push
+              shockwaves.push({
+                x: circleX,
+                y: circleY,
+                radius: 4,
+                maxRadius: circleRadius + 75,
+                color: chromoColors[Math.floor(Math.random() * chromoColors.length)],
+                alpha: 1.0
+              });
+
+              // Emmit glowing crystal spark particles radially
+              for (let s = 0; s < 30; s++) {
+                const angle = Math.random() * Math.PI * 2;
+                const v = 3.0 + Math.random() * 6.5;
+                sparks.push({
+                  x: circleX,
+                  y: circleY,
+                  vx: Math.cos(angle) * v,
+                  vy: Math.sin(angle) * v,
+                  size: 2.2 + Math.random() * 3.5,
+                  color: chromoColors[Math.floor(Math.random() * chromoColors.length)],
+                  life: 1.0
+                });
+              }
+            }
+          });
+
+          // Draw ring shockwaves
+          for (let i = shockwaves.length - 1; i >= 0; i--) {
+            const rNode = shockwaves[i];
+            rNode.radius += 4.0;
+            rNode.alpha -= 0.024;
+            if (rNode.alpha <= 0 || rNode.radius >= rNode.maxRadius) {
+              shockwaves.splice(i, 1);
+              continue;
+            }
+            ctx.save();
+            ctx.strokeStyle = rNode.color;
+            ctx.globalAlpha = rNode.alpha;
+            ctx.lineWidth = 4 * rNode.alpha;
+            ctx.beginPath();
+            ctx.arc(rNode.x, rNode.y, rNode.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Draw visual sparks
+          for (let i = sparks.length - 1; i >= 0; i--) {
+            const sNode = sparks[i];
+            sNode.x += sNode.vx;
+            sNode.y += sNode.vy;
+            sNode.vx *= 0.96;
+            sNode.vy *= 0.96;
+            sNode.life -= 0.022;
+
+            if (sNode.life <= 0) {
+              sparks.splice(i, 1);
+              continue;
+            }
+
+            ctx.save();
+            ctx.fillStyle = sNode.color;
+            ctx.globalAlpha = sNode.life;
+            ctx.beginPath();
+            ctx.arc(sNode.x, sNode.y, sNode.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // Are we finished?
+          const activeDropsCount = capsules.filter(c => !c.exploded).length;
+          if (activeDropsCount === 0 && sparks.length === 0 && shockwaves.length === 0) {
+            if (!completed) {
+              completed = true;
+              setIsFinishing(true);
+              setTimeout(() => {
+                onComplete();
+              }, 2200);
+            }
+          }
+
+          animationFrameId = requestAnimationFrame(updateLoop);
+        };
+
+        animationFrameId = requestAnimationFrame(updateLoop);
+
+        return () => {
+          cancelAnimationFrame(animationFrameId);
+        };
+      }, [worries, onComplete]);
+
+      return (
+        <div ref={containerRef} className="flex-1 w-full h-[390px] min-h-[390px] max-h-[440px] relative overflow-hidden bg-[#f8fafc] rounded-3xl border border-slate-200">
+          <div className="absolute top-5 left-0 right-0 text-center px-4 z-10 pointer-events-none">
+            <span className="text-[10px] uppercase font-mono tracking-widest font-bold text-sky-500 bg-sky-50 px-3 py-1 rounded-full border border-sky-100 inline-block">
+              Alquimia de Dissolução Ativa
+            </span>
+            <h2 className="text-xs font-semibold text-slate-600 mt-1.5">
+              Suas cargas mentais estão sendo convertidas em luz...
+            </h2>
+          </div>
+
+          <canvas ref={canvasRef} className="w-full h-full block" />
+
+          <div className="absolute bottom-6 left-0 right-0 text-center z-10 px-6 pointer-events-none flex flex-col items-center">
+            <div className="bg-white/95 border border-emerald-100 shadow-md shadow-emerald-50 py-2.5 px-4 rounded-xl max-w-sm">
+              <p className="text-xs text-emerald-700 font-semibold leading-relaxed font-sans text-center">
+                {activePhrase}
+              </p>
+            </div>
+            
+            {isFinishing && (
+              <p className="text-[9px] text-sky-600 font-mono tracking-widest uppercase mt-3 font-semibold animate-pulse">
+                Transmutação concluída! Carregando respiração guiada...
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- SCREEN 3: CHROMOTHERAPY GUIDED RESPIRATION CYCLE ---
+    function SessionScreen({
+      worries,
+      fontSize,
+      activeMode,
+      volume,
+      setVolume,
+      isPlaying,
+      setIsPlaying,
+      breathingPhase,
+      setBreathingPhase,
+      secondsLeft,
+      setSecondsLeft,
+      breathCount,
+      setBreathCount,
+      cycleCount,
+      setCycleCount,
+      inRestInterval,
+      setInRestInterval,
+      restSecondsLeft,
+      setRestSecondsLeft,
+      onEndSession,
+      onSessionComplete
+    }) {
+      const isLarge = fontSize === 'large';
+      const canvasRef = useRef(null);
+
+      // Handle synchronizing sound phase sweeps on status tick
+      useEffect(() => {
+        if (isPlaying && !inRestInterval) {
+          audio.setBreathingPhase(breathingPhase);
+        }
+      }, [breathingPhase, isPlaying, inRestInterval]);
+
+      // Timer progression interval loops
+      useEffect(() => {
+        if (!isPlaying || inRestInterval) return;
+
+        const interval = setInterval(() => {
+          setSecondsLeft(prev => {
+            if (prev <= 1) {
+              setBreathingPhase(current => {
+                if (activeMode === 'aterramento') {
+                  // Standard box breathing sequence (4s intervals): inhale -> hold -> exhale -> holdEmpty
+                  switch (current) {
+                    case 'inhale': return 'hold';
+                    case 'hold': return 'exhale';
+                    case 'exhale': return 'holdEmpty';
+                    case 'holdEmpty':
+                      setBreathCount(b => {
+                        if (b >= 10) {
+                          setInRestInterval(true);
+                          setRestSecondsLeft(8);
+                          return 1;
+                        }
+                        return b + 1;
+                      });
+                      return 'inhale';
+                  }
+                } else {
+                  // Coherent cycle (5s inhale -> 5s exhale)
+                  switch(current) {
+                    case 'inhale': return 'exhale';
+                    case 'exhale':
+                      setBreathCount(b => {
+                        if (b >= 10) {
+                          setInRestInterval(true);
+                          setRestSecondsLeft(8);
+                          return 1;
+                        }
+                        return b + 1;
+                      });
+                      return 'inhale';
+                  }
+                }
+              });
+              return activeMode === 'aterramento' ? 4 : 5;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+
+        return () => clearInterval(interval);
+      }, [isPlaying, inRestInterval, cycleCount, activeMode]);
+
+      // Rest Interval Count loop (8s cooldown interval between cycles)
+      useEffect(() => {
+        if (!isPlaying || !inRestInterval) return;
+
+        audio.triggerShredSound(); // play water wash transition chord sounds
+
+        const interval = setInterval(() => {
+          setRestSecondsLeft(prev => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              if (cycleCount >= 3) {
+                onSessionComplete();
+              } else {
+                setCycleCount(c => c + 1);
+                setInRestInterval(false);
+                setSecondsLeft(activeMode === 'aterramento' ? 4 : 5);
+                setBreathingPhase('inhale');
+              }
+              return 8;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+
+        return () => clearInterval(interval);
+      }, [isPlaying, inRestInterval, cycleCount, activeMode]);
+
+      // Draw aesthetic decorative sound canvas particles
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = canvas.parentElement?.clientWidth || 320;
+        canvas.height = 40;
+
+        let frameId = null;
+        const render = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          ctx.strokeStyle = activeChromo.colorHex;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          
+          const points = 60;
+          const amplitude = isPlaying ? 10 : 2;
+          const time = Date.now() * 0.004;
+
+          for (let i = 0; i < points; i++) {
+            const x = (i / (points - 1)) * canvas.width;
+            const sine = Math.sin((i * 0.15) + time) * Math.cos((i * 0.05) - time * 0.5);
+            // reduce amplitude at ends
+            const edgeReducer = Math.sin((i / (points - 1)) * Math.PI);
+            const y = (canvas.height * 0.5) + sine * amplitude * edgeReducer;
+            
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+
+          frameId = requestAnimationFrame(render);
+        };
+        render();
+
+        return () => cancelAnimationFrame(frameId);
+      }, [breathingPhase, isPlaying]);
+
+      // Pick chromotherapy colors configuration based on phase
+      const activeChromo = CHROMO_CONFIG[breathingPhase] || CHROMO_CONFIG.inhale;
+      const progressPercent = activeMode === 'aterramento' ? (secondsLeft / 4) : (secondsLeft / 5);
+
+      return (
+        <div className="w-full flex-1 flex flex-col justify-between items-center relative animate-fade-in text-slate-800" id="session-container">
+          
+          {/* Glowing colorful pastel backdrop overlay */}
+          <div 
+            className="fixed inset-0 -z-10 opacity-30 pointer-events-none"
+            style={{ 
+              background: `radial-gradient(circle at 50% 50%, ${activeChromo.bgHex} 0%, rgba(255, 255, 255, 0) 80%)`,
+              transition: 'background 2200ms cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+          />
+
+          {/* Sub-HUD Breathing Status Header Indicator counts */}
+          <div className="w-full bg-white/70 border border-slate-200 p-4 rounded-3xl flex items-center justify-between shadow-2xs z-10">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-mono font-bold tracking-widest text-[#a855f7] uppercase">Ciclo Próximo</span>
+              <span className={`font-semibold text-slate-800 tracking-tight ${isLarge ? 'text-lg' : 'text-sm'}`}>
+                Série {cycleCount} de 3
+              </span>
+            </div>
+
+            {/* Custom progress visual block segments */}
+            <div className="flex gap-1">
+              {[1, 2, 3].map((s) => (
+                <div 
+                  key={s} 
+                  className={`w-5 h-1.5 rounded-full transition-all duration-300 ${s <= cycleCount ? 'bg-[#7c3aed]' : 'bg-[#e2e8f0]'}`} 
+                />
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-0.5 text-right">
+              <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 uppercase">Respirações</span>
+              <span className={`font-mono text-slate-800 font-extrabold ${isLarge ? 'text-lg' : 'text-sm'}`}>
+                {breathCount}/10
+              </span>
+            </div>
+          </div>
+
+          {/* Core Breathing Circle animation segment */}
+          {inRestInterval ? (
+            <div className="flex flex-col items-center justify-center text-center p-8 z-10 space-y-4">
+              <div className="w-24 h-24 rounded-full border-4 border-[#34d399] flex items-center justify-center animate-wiggle bg-emerald-50 shadow-lg shadow-emerald-100">
+                <span className="text-sm font-extrabold text-emerald-800 font-mono">{restSecondsLeft}s</span>
+              </div>
+              <div>
+                <h3 className="font-sans font-extrabold text-slate-800 text-base">Intervalo de Transição</h3>
+                <p className="text-xs text-slate-500 max-w-[260px] leading-relaxed mt-1">Sua respiração já dissipou fardos! Prepare seu corpo e pulmões para a próxima ciclo de transição.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center z-10 space-y-9 my-6">
+              
+              {/* Scalable Glowing circle indicator */}
+              <div 
+                className={`w-[144px] h-[144px] rounded-full flex items-center justify-center relative transition-all duration-1000 z-10 ${activeChromo.shadowClass} ${activeChromo.scaling}`}
+                style={{ 
+                  borderColor: activeChromo.colorHex,
+                  borderWidth: '1.5px',
+                  background: `radial-gradient(circle, ${activeChromo.bgHex} 0%, ${activeChromo.bgHex}ea 60%, ${activeChromo.colorHex}3a 100%)`,
+                  transform: activeChromo.scaling === 'scale-110' ? 'scale(1.18)' : 'scale(0.85)'
+                }}
+              >
+                {/* SVG Progress Arc */}
+                <svg className="absolute inset-0 w-full h-full -rotate-90 z-0" viewBox="0 0 144 144">
+                  <circle cx="72" cy="72" r="67" className="stroke-slate-200/25 fill-none" strokeWidth="3.5" />
+                  <circle
+                    cx="72"
+                    cy="72"
+                    r="67"
+                    className="fill-none transition-all duration-1000"
+                    stroke={activeChromo.colorHex}
+                    strokeWidth="4"
+                    strokeDasharray={2 * Math.PI * 67}
+                    strokeDashoffset={2 * Math.PI * 67 * (1 - progressPercent)}
+                    strokeLinecap="round"
+                  />
+                </svg>
+
+                {/* Inner glassmorphic overlay numbers ring card */}
+                <div className="absolute inset-[10px] bg-white/70 backdrop-blur-[4px] rounded-full flex flex-col items-center justify-center border border-white/60 shadow-inner z-10">
+                  <span className="font-mono text-3xl font-black tracking-tight" style={{ color: activeChromo.textColor }}>
+                    {secondsLeft}s
+                  </span>
+                </div>
+              </div>
+
+              {/* Phase and Action Instructions texts layout */}
+              <div className="text-center space-y-2">
+                <span className="text-[10px] uppercase font-mono tracking-widest font-extrabold bg-slate-100 border border-slate-200 px-3 py-1 rounded-full text-slate-500">
+                  {activeChromo.colorName} • {activeChromo.meaning}
+                </span>
+                
+                <h2 className={`font-sans tracking-tight text-slate-800 leading-tight transition-all duration-500 font-black ${isLarge ? 'text-2xl' : 'text-lg'}`}>
+                  {activeChromo.text}
+                </h2>
+              </div>
+            </div>
+          )}
+
+          {/* Dynamic Spectrum Wave helper visualization */}
+          <div className="w-full max-w-[320px] h-[40px] relative mt-2 z-10">
+            <canvas ref={canvasRef} className="w-full h-full block mx-auto" />
+          </div>
+
+          {/* Dynamic Digital Psychologist Reframed Wisdom Quote Carousel */}
+          <div className="w-full bg-white border border-slate-200/90 rounded-3xl p-5 shadow-2xs space-y-3 z-10 mt-4 relative">
+            <div className="flex items-center justify-between text-[9px] uppercase font-mono tracking-wider font-bold text-slate-400">
+              <span className="text-[#10b981] font-extrabold flex items-center gap-1">
+                <span>✓</span> Carga Transmutada e Dissolvida
+              </span>
+              <span>— Psicólogo Adilson Cardoso</span>
+            </div>
+            
+            <div className="py-2.5 pb-2.5">
+              <p className="text-[10px] text-red-500/80 font-mono line-through truncate opacity-70 italic font-medium">
+                "{worries[0]?.text || 'Tensão acumulada da rotina diária'}"
+              </p>
+              <p className={`text-slate-700 leading-normal mt-1.5 font-sans font-semibold tracking-tight ${isLarge ? 'text-sm' : 'text-xs'}`}>
+                {worries[0] ? getComfortPhrase(worries[0].text) : 'Sua respiração é a sua âncora absoluta. Deixe de lado as pressões e cobranças externas.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Control bar triggers (Play/Pause, Leave) */}
+          <div className="w-full flex items-center justify-between pt-6 z-10 gap-4 mt-2">
+            <button
+              type="button"
+              onClick={onEndSession}
+              className="text-xs text-rose-500 font-extrabold px-5 py-3 border border-rose-200 rounded-2xl hover:bg-rose-50 cursor-pointer active:scale-95 transition-transform font-sans"
+            >
+              Encerrar Sessão
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="bg-black text-white hover:bg-slate-900 px-6 py-3 rounded-2xl font-extrabold text-sm flex items-center gap-2 cursor-pointer active:scale-95 transition-transform shadow-md"
+            >
+              <span>{isPlaying ? 'Pausar Respiração' : 'Retomar'}</span>
+              <span>{isPlaying ? '⏸' : '▶'}</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // --- SCREEN 4: HABIT COMPLETION SCREEN (CONGRATS) ---
+    function CongratulationsScreen({ completedDays, fontSize, onGoHome }) {
+      const isLarge = fontSize === 'large';
+      
+      return (
+        <div className="w-full flex-1 flex flex-col justify-center items-center text-center space-y-6 animate-fade-in py-6">
+          
+          {/* Sparkling big icon representing success and clinical meditation complete */}
+          <div className="w-20 h-20 bg-gradient-to-tr from-purple-150 to-indigo-50/40 rounded-full border-2 border-purple-300 flex items-center justify-center text-3xl animate-bounce shadow-md">
+            🏆
+          </div>
+
+          <div className="space-y-2 max-w-sm">
+            <span className="text-[10px] font-mono tracking-widest uppercase font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-3.5 py-1 rounded-full inline-block">
+              Sessão Concluída!
+            </span>
+            <h2 className={`font-sans tracking-tight text-slate-800 leading-tight font-black ${isLarge ? 'text-2xl' : 'text-xl'}`}>
+              Carga Mental Triturada com Sucesso!
+            </h2>
+            <p className="text-xs text-slate-500 leading-relaxed font-sans max-w-[290px] mx-auto">
+              Seu cérebro experimentou um realinhamento eletromagnético através do ciclo completo de Cromoterapia e sintonia harmonic Solfeggio 432Hz.
+            </p>
+          </div>
+
+          {/* Interactive Tracker Grid reflecting completion checks */}
+          <div className="w-full bg-white border border-slate-200 p-5 rounded-3xl shadow-sm max-w-sm space-y-4">
+            <h4 className="text-slate-800 font-sans font-extrabold text-xs text-left">Sua Jornada Habitual (15 Dias):</h4>
+            <div className="grid grid-cols-5 gap-2.5">
+              {Array.from({ length: 15 }).map((_, idx) => {
+                const dayNum = idx + 1;
+                const done = completedDays.includes(dayNum);
+                return (
+                  <div
+                    key={idx}
+                    className={`aspect-square rounded-2xl flex flex-col items-center justify-center border transition-all cursor-default ${done ? 'border-purple-300 bg-purple-50 text-purple-700 font-extrabold' : 'border-slate-100 bg-slate-50/50 text-slate-400'}`}
+                  >
+                    <span className="text-[10px] font-bold font-mono">D{dayNum}</span>
+                    <span className="text-[11px] mt-0.5">{done ? '✓' : '•'}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono text-left italic">
+              * Complete uma sessão completa de respiração por dia para consolidar o hábito de triturar o excesso de estresse diário.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onGoHome}
+            className="bg-[#7c3aed] text-white hover:bg-[#6d28d9] font-bold text-sm px-8 py-3.5 rounded-2xl w-full max-w-sm shadow-sm active:scale-95 transition-transform cursor-pointer"
+          >
+            Voltar ao Início
+          </button>
+        </div>
+      );
+    }
+
+    // --- COMPONENT: JOURNEY TRACKER DOTS GRID ---
+    function JourneyTracker({ completedDays }) {
+      return (
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3.5">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h4 className="text-slate-800 font-sans font-extrabold text-xs">Jornada Mente Leve (Habit Tracker)</h4>
+            <span className="text-[10px] font-mono text-indigo-600 font-extrabold bg-indigo-50 px-2 py-0.5 rounded-full">
+              {completedDays.length}/15 dias
+            </span>
+          </div>
+
+          <div className="grid grid-cols-5 gap-2.5">
+            {Array.from({ length: 15 }).map((_, idx) => {
+              const dayNum = idx + 1;
+              const isTodayNext = completedDays.length + 1 === dayNum;
+              const isChecked = completedDays.includes(dayNum);
+
+              return (
+                <div
+                  key={idx}
+                  className={`aspect-square rounded-2xl border flex flex-col items-center justify-center transition-all ${isChecked ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-extrabold shadow-2xs' : isTodayNext ? 'bg-amber-50/40 border-amber-200 text-amber-700 font-extrabold animate-pulse' : 'bg-slate-50/50 border-slate-100 text-slate-400'}`}
+                >
+                  <span className="text-[10px] font-mono font-bold">D{dayNum}</span>
+                  <span className="text-[11px] mt-0.5 leading-none">{isChecked ? '✓' : isTodayNext ? '▶' : '•'}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // Render App Node
+    const rootElement = document.getElementById("root");
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+  </script>
+
+</body>
+</html>

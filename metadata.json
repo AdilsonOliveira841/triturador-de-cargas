@@ -1,0 +1,6 @@
+{
+  "name": "Triturador de Carga Mental",
+  "description": "Descarregue suas preocupações da mente, triture-as em pedaços e entre em um ambiente de meditação imersivo com áudio binaural adaptativo para liberar a tensão e recuperar a calma.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
